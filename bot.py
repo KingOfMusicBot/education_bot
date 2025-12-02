@@ -23,7 +23,7 @@ SHORT_API = "be0a750eaa503966539bb811a849dd99ced62f24"
 ADMIN_IDS = [8142003954, 6722991035]
 
 # Channels user must join (public username or -100id). Keep empty [] if not enforcing.
-REQUIRED_CHANNELS = ["@officialStudymeta", ]  # example
+REQUIRED_CHANNELS = ["@OfficialStudymeta", ]  # example
 
 # ADMIN BYPASS flag: if True, admins will NOT require shortener verification
 ADMIN_BYPASS = True
@@ -188,18 +188,73 @@ async def add_lecture(message: types.Message):
 # ================= START / MENU =================
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message):
+    # If start came with token deep-link, keep existing unlock flow
     if "token_" in (message.text or ""):
         return await unlock_start(message)
 
-    kb = InlineKeyboardMarkup()
+    START_PIC = "https://files.catbox.moe/vn63kv.jpg"   # <-- replace with your image URL or local path "files/start.jpg"
+    OWNER_ID = 8142003954                               # <-- replace with real owner numeric id (you already gave)
+    SUPPORT_LINK = "https://t.me/+qRNfBmkeD3M1MWY1"      # <-- replace with your support group link or username
+    UPDATE_CHANNEL = "https://t.me/+ovWiaEu0whoxMDQ9"   # <-- replace with your updates channel link or username
+
+    # Prepare buttons
+    me = await bot.get_me()
+    bot_username = me.username or "bot"
+
+    add_bot_url = f"https://t.me/{bot_username}?startgroup=true"
+    owner_url = f"tg://user?id={OWNER_ID}"
+    support_url = SUPPORT_LINK
+    update_url = UPDATE_CHANNEL
+
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        InlineKeyboardButton("➕ Add me to your group", url=add_bot_url),
+        InlineKeyboardButton("👤 Owner", url=owner_url),
+    )
+    kb.add(
+        InlineKeyboardButton("💬 Support Group", url=support_url),
+        InlineKeyboardButton("📣 Update Channel", url=update_url),
+    )
+    kb.add(
+        InlineKeyboardButton("📚 Show Batches", callback_data="show_batches")
+    )
+
+    start_text = (
+        "👋 Welcome to Study Meta Bot!
+
+"
+        "Use the buttons below:
+"
+        "• Add the bot to your group
+"
+        "• Contact owner or support
+"
+        "• Open update channel for latest lectures
+
+"
+        "Click Show Batches to view available batches."
+    )
+
+    try:
+        await bot.send_photo(chat_id=message.chat.id, photo=START_PIC, caption=start_text, reply_markup=kb)
+    except Exception:
+        await message.answer(start_text, reply_markup=kb)
+
+@dp.callback_query_handler(lambda c: c.data == "show_batches")
+async def show_batches_callback(c: types.CallbackQuery):
     batches = lectures_col.distinct("batch")
     if not batches:
-        return await message.answer("No batches configured yet.")
+        await c.answer("No batches configured yet.", show_alert=True)
+        return
+    kb = InlineKeyboardMarkup()
     for batch in batches:
         kb.add(InlineKeyboardButton(batch, callback_data=f"batch|{batch}"))
-    await message.answer("📚 Select Batch", reply_markup=kb)
+    try:
+        await c.message.edit_text("📚 Select Batch", reply_markup=kb)
+    except Exception:
+        await c.message.answer("📚 Select Batch", reply_markup=kb)
+    await c.answer()
 
-# ================= SELECT FLOW =================
 @dp.callback_query_handler(lambda c: c.data.startswith("batch|"))
 async def select_subject(c: types.CallbackQuery):
     _, batch = c.data.split("|", 1)
@@ -266,8 +321,8 @@ async def lecture_request(c: types.CallbackQuery):
     premium = bool(u.get("premium")) and u.get("expiry") and u["expiry"] > datetime.utcnow()
 
     # premium condition for > free limit
-    #if lec > LIMIT_FREE and not premium:
-       # return await c.message.answer("🔒 Premium required for this lecture.")
+   # if lec > LIMIT_FREE and not premium:
+        #return await c.message.answer("🔒 Premium required for this lecture.")
 
     # auto-subscribe check
     if REQUIRED_CHANNELS:
@@ -544,7 +599,8 @@ async def help_cmd(message: types.Message):
     isadm = is_admin(message.from_user.id)
 
     parts = []
-    parts.append("📘 Available commands:\n")
+    parts.append("📘 Available commands:
+")
     parts.append("User / Student:")
     parts.append(" - /start → Open menu and pick batch/subject/chapter/lecture")
     parts.append(" - Follow verification link for free lectures to unlock")
@@ -567,7 +623,8 @@ async def help_cmd(message: types.Message):
     parts.append(" - Admin: forward a channel post → then run /save_forward Arjuna_jee_2026 physics ch01 1")
     parts.append(" - Student: /start → choose batch → subject → chapter → lecture → verification link → unlocked")
 
-    help_text = "\n".join(parts)
+    help_text = "
+".join(parts)
     await message.reply(help_text)
 
 # ================= RUN =================
