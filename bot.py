@@ -1,15 +1,20 @@
+# bot.py
 import logging
+import secrets
+import urllib.parse
+from datetime import datetime, timedelta
+
+import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils import executor
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from datetime import datetime, timedelta
 from pymongo import MongoClient
-import requests
 
 # ========================= CONFIG =========================
-BOT_TOKEN = "7572890989:AAGizMW3AO9mA-PONpEFAL4NBO6jldL-fNk"
-MONGO_URI = "mongodb+srv://parice819:fOJsdMBDj7xMKVFW@cluster0.str54m7.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+BOT_TOKEN = "7572890989:AAGizMW3AO9mA-PONpEFAL4NBO6jldL-fNk"           # <-- replace
+MONGO_URI = "mongodb+srv://parice819:fOJsdMBDj7xMKVFW@cluster0.str54m7.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"            # <-- replace
 
+# Provided by you
 ADMIN_IDS = [8142003954, 6722991035]
 SHORT_API = "be0a750eaa503966539bb811a849dd99ced62f24"
 
@@ -56,12 +61,10 @@ async def add_chapter(message: types.Message):
     if not is_admin(message.from_user.id):
         return await message.reply("⛔ Not admin.")
     try:
-        # naive split: allow quoted chapter name
         parts = message.text.split()
         if len(parts) < 5:
             raise ValueError("bad")
         _, batch, subject, chapter_id = parts[:4]
-        # chapter name may contain spaces and be quoted
         rest = message.text.split(chapter_id, 1)[1].strip()
         chapter_name = rest.strip().strip('"').strip()
         chapters_col.insert_one({
@@ -108,7 +111,8 @@ async def add_lecture(message: types.Message):
 
 @dp.message_handler(commands=["set_premium"])
 async def set_premium(message: types.Message):
-    if not is_admin(message.from_user.id): return
+    if not is_admin(message.from_user.id):
+        return
     try:
         _, uid, days = message.text.split()
         uid = int(uid); days = int(days)
@@ -124,7 +128,8 @@ async def set_premium(message: types.Message):
 
 @dp.message_handler(commands=["revoke"])
 async def revoke(message: types.Message):
-    if not is_admin(message.from_user.id): return
+    if not is_admin(message.from_user.id):
+        return
     try:
         _, uid = message.text.split()
         uid = int(uid)
@@ -137,8 +142,8 @@ async def revoke(message: types.Message):
 # ========================= START / MENU ===================
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message):
-    # deep-link unlock
-    if "unlock_" in message.text:
+    # deep-link unlock handling (token)
+    if "token_" in (message.text or ""):
         return await unlock_start(message)
 
     kb = InlineKeyboardMarkup()
@@ -153,7 +158,6 @@ async def start(message: types.Message):
 @dp.callback_query_handler(lambda c: c.data.startswith("batch|"))
 async def select_subject(c: types.CallbackQuery):
     _, batch = c.data.split("|", 1)
-    # list subjects present in lectures OR chapters
     subjects_set = set()
     for s in lectures_col.find({"batch": batch}).distinct("subject"):
         subjects_set.add(s)
@@ -170,7 +174,6 @@ async def select_subject(c: types.CallbackQuery):
 @dp.callback_query_handler(lambda c: c.data.startswith("sub|"))
 async def select_chapter(c: types.CallbackQuery):
     _, batch, sub = c.data.split("|", 2)
-    # get chapters for this batch+subject
     chapters = list(chapters_col.find({"batch": batch, "subject": sub}).sort("created_at", 1))
     kb = InlineKeyboardMarkup()
     if chapters:
@@ -179,19 +182,17 @@ async def select_chapter(c: types.CallbackQuery):
             cname = ch.get("chapter_name") or cid
             kb.add(InlineKeyboardButton(f"{cname}", callback_data=f"chap|{batch}|{sub}|{cid}"))
     else:
-        # fallback: if no chapters created, show lectures directly grouped with chapter=""
-        # list distinct chapter values from lectures_col (may be absent)
+        # fallback: group lectures by chapter field (may be empty)
         for ch in lectures_col.find({"batch": batch, "subject": sub}).distinct("chapter"):
             cid = ch or "default"
             kb.add(InlineKeyboardButton(f"{cid}", callback_data=f"chap|{batch}|{sub}|{cid}"))
     await c.message.edit_text(f"📚 {batch} / {sub}\nSelect Chapter", reply_markup=kb)
 
-# =================== SELECT LECTURE =======================
+# =================== SELECT LECTURE ======================
 @dp.callback_query_handler(lambda c: c.data.startswith("chap|"))
 async def select_lecture(c: types.CallbackQuery):
     _, batch, sub, chapter_id = c.data.split("|", 3)
     kb = InlineKeyboardMarkup(row_width=5)
-    # fetch lectures matching batch, subject, chapter
     cursor = lectures_col.find({"batch": batch, "subject": sub, "chapter": chapter_id}).sort("lec_no", 1)
     found = False
     for lec in cursor:
@@ -202,7 +203,7 @@ async def select_lecture(c: types.CallbackQuery):
         return await c.message.edit_text("No lectures found in this chapter.")
     await c.message.edit_text(f"🎬 {batch}/{sub}/{chapter_id}\nSelect Lecture", reply_markup=kb)
 
-# ==================== LECTURE REQUEST =====================
+# ------------- TOKEN-BASED VERIFICATION FLOW -------------
 @dp.callback_query_handler(lambda c: c.data.startswith("lec|"))
 async def lecture_request(c: types.CallbackQuery):
     uid = c.from_user.id
@@ -212,69 +213,99 @@ async def lecture_request(c: types.CallbackQuery):
     u = get_user(uid)
     premium = bool(u.get("premium")) and u.get("expiry") and u["expiry"] > datetime.utcnow()
 
-    # Premium check: if lecture > free limit and not premium -> ask to buy
+    # Premium check: if above free limit and not premium -> ask to buy
     if lec > LIMIT_FREE and not premium:
         return await c.message.answer("🔒 Premium required for this lecture.")
 
-    # If free lecture -> require verification
-    if not premium:
-        # save pending (store chapter too)
-        users_col.update_one(
-            {"_id": uid},
-            {"$set": {"pending": {"batch": batch, "subject": sub, "chapter": chapter_id, "lec": lec}}},
-            upsert=True
-        )
-        me = await bot.get_me()
-        long_link = f"https://t.me/{me.username}?start=unlock_{uid}"
-        try:
-            resp = requests.get(
-                f"https://arolinks.com/api?api={SHORT_API}&url={long_link}",
-                timeout=10
-            )
-            data = resp.json()
-            short_url = data.get("shortenedUrl") or long_link
-        except Exception as e:
-            logging.exception(e)
-            short_url = long_link
+    # If premium -> forward directly
+    if premium:
+        lec_doc = lectures_col.find_one({"batch": batch, "subject": sub, "chapter": chapter_id, "lec_no": lec})
+        if not lec_doc:
+            return await c.message.answer("Lecture not found.")
+        await bot.forward_message(uid, lec_doc["channel_id"], lec_doc["message_id"])
+        return await c.answer("▶ Sent")
 
-        text = (
-            "🔐 Verification needed.\n"
-            "1) Open link\n"
-            "2) Complete shortner\n"
-            "3) When redirected back to bot, lecture will unlock automatically.\n\n"
-            f"{short_url}\n\n"
-            "⚠ Lecture will not unlock until you return via the short-link."
-        )
-        await c.message.answer(text)
-        await c.answer()
-        return
+    # FREE lecture -> create single-use token & save pending mapping
+    token = secrets.token_urlsafe(12)
+    users_col.update_one(
+        {"_id": uid},
+        {"$set": {"pending": {
+            "token": token,
+            "batch": batch,
+            "subject": sub,
+            "chapter": chapter_id,
+            "lec": lec,
+            "created_at": datetime.utcnow()
+        }}},
+        upsert=True
+    )
 
-    # Premium path -> forward lecture
-    lec_doc = lectures_col.find_one({
-        "batch": batch, "subject": sub, "chapter": chapter_id, "lec_no": lec
-    })
-    if not lec_doc:
-        return await c.message.answer("Lecture not found.")
-    await bot.forward_message(uid, lec_doc["channel_id"], lec_doc["message_id"])
-    await c.answer("▶ Sent")
+    me = await bot.get_me()
+    long_link = f"https://t.me/{me.username}?start=token_{token}"
 
-# ==================== UNLOCK HANDLER =======================
-async def unlock_start(m: types.Message):
+    # Shorten link with params safely
     try:
-        raw = m.text.split("unlock_", 1)[1].strip()
-        uid = int(raw)
-        if m.from_user.id != uid:
-            return await m.answer("⚠ Verification invalid for this user.")
+        api_url = "https://arolinks.com/api"
+        params = {"api": SHORT_API, "url": long_link}
+        resp = requests.get(api_url, params=params, timeout=10)
+        data = resp.json()
+        short_url = data.get("shortenedUrl") or long_link
+    except Exception as e:
+        logging.exception(e)
+        short_url = long_link
+
+    text = (
+        "🔐 Verification needed (cannot be skipped).\n\n"
+        "1) Open the link below\n"
+        "2) Complete the shortner flow\n"
+        "3) When redirected back to bot, lecture will unlock automatically.\n\n"
+        f"{short_url}\n\n"
+        "⚠ Lecture will unlock only if you return via this link."
+    )
+    await c.message.answer(text)
+    await c.answer()
+
+# ==================== UNLOCK HANDLER (TOKEN) =====================
+async def unlock_start(m: types.Message):
+    """
+    Handles deep-link like: /start token_<token>
+    """
+    try:
+        text = m.text or ""
+        if "token_" not in text:
+            return await m.answer("❌ No verification token found in start command.")
+
+        token = None
+        try:
+            token = text.split("token_", 1)[1].strip()
+        except:
+            decoded = urllib.parse.unquote_plus(text)
+            if "token_" in decoded:
+                token = decoded.split("token_", 1)[1].strip()
+
+        if not token:
+            return await m.answer("❌ Invalid verification token.")
+
+        # Find which user has this pending token
+        # We expect the user returning to be the same whose pending token exists.
+        uid = m.from_user.id
         u = get_user(uid)
         pending = u.get("pending")
-        if not pending:
-            return await m.answer("❌ Verification not registered. Open link again.")
-        batch = pending["batch"]; sub = pending["subject"]; chapter = pending["chapter"]; lec = int(pending["lec"])
+        if not pending or pending.get("token") != token:
+            return await m.answer("❌ Verification mismatch or expired. Open the short link again.")
+
+        # All good: forward lecture and clear pending
+        batch = pending["batch"]
+        sub = pending["subject"]
+        chapter = pending["chapter"]
+        lec = int(pending["lec"])
+
         lec_doc = lectures_col.find_one({"batch": batch, "subject": sub, "chapter": chapter, "lec_no": lec})
         if not lec_doc:
-            return await m.answer("Lecture not found.")
-        # clear pending
+            return await m.answer("Lecture not found (contact admin).")
+
         users_col.update_one({"_id": uid}, {"$unset": {"pending": ""}})
+
         await bot.forward_message(uid, lec_doc["channel_id"], lec_doc["message_id"])
         return await m.answer("🎉 Verified — Lecture Unlocked!")
     except Exception as e:
@@ -283,5 +314,5 @@ async def unlock_start(m: types.Message):
 
 # ==========================================================
 if __name__ == "__main__":
-    logging.info("Bot starting with chapters support...")
+    logging.info("Bot starting with token-based verification and chapters...")
     executor.start_polling(dp, skip_updates=True)
