@@ -23,7 +23,7 @@ SHORT_API = "be0a750eaa503966539bb811a849dd99ced62f24"
 ADMIN_IDS = [8142003954, 6722991035]
 
 # Channels user must join (public username or -100id). Keep empty [] if not enforcing.
-REQUIRED_CHANNELS = ["@OfficialStudyMeta", ]  # example
+REQUIRED_CHANNELS = ["@YourAnnounceChannel", ]  # example
 
 # ADMIN BYPASS flag: if True, admins will NOT require shortener verification
 ADMIN_BYPASS = True
@@ -266,8 +266,8 @@ async def lecture_request(c: types.CallbackQuery):
     premium = bool(u.get("premium")) and u.get("expiry") and u["expiry"] > datetime.utcnow()
 
     # premium condition for > free limit
-   # if lec > LIMIT_FREE and not premium:
-       # return await c.message.answer("🔒 Premium required for this lecture.")
+    #if lec > LIMIT_FREE and not premium:
+        #return await c.message.answer("🔒 Premium required for this lecture.")
 
     # auto-subscribe check
     if REQUIRED_CHANNELS:
@@ -536,6 +536,56 @@ async def update_repo(message: types.Message):
     except Exception as e:
         logger.exception("restart failed")
         await message.reply(f"❌ Restart failed: {e}")
+
+# ================= HELP COMMAND =================
+@dp.message_handler(commands=["help"])
+async def help_cmd(message: types.Message):
+    """Show available commands with short examples. Admins see admin-only commands."""
+    isadm = is_admin(message.from_user.id)
+    user_cmds = [
+        ("/start", "Open bot menu (select batch → subject → chapter → lecture)"),
+        ("Select buttons", "Use on-screen buttons to navigate batches/subjects/chapters/lectures"),
+        ("/save_forward", "Admin helper — see admin commands"),
+    ]
+    admin_cmds = [
+        ("/add_chapter <batch> <subject> <chapter_id> \"Chapter Name\"", "Add chapter. Example: /add_chapter Arjuna_jee_2026 physics ch01 \"Kinematics Basics\""),
+        ("/add_lecture <batch> <subject> <chapter_id> <lec_no> <channel_id> <message_id>", "Add lecture manually. Example: /add_lecture Arjuna_jee_2026 physics ch01 1 -100123456789 45"),
+        ("Forward channel post to bot + /save_forward <batch> <subject> <chapter> <lec_no>", "Reliable way to save channel lecture without copying ids."),
+        ("/stats", "Show basic analytics"),
+        ("/top_lectures [N]", "Top N lectures by unlocks. Example: /top_lectures 10"),
+        ("/pending_tokens", "Show recent unused tokens"),
+        ("/update_repo [no-install|install]", "Pull latest repo and restart bot. Example: /update_repo no-install"),
+    ]
+    text = "📘 Available commands:
+
+"
+    # user commands
+    text += "User / Student:
+"
+    text += f" - /start → Open menu and pick batch/subject/chapter/lecture
+"
+    text += f" - After selecting lecture, follow on-screen verification link (shortener) to unlock free lectures.
+
+"
+    if isadm:
+        text += "Admin commands:
+"
+        for cmd, desc in admin_cmds:
+            text += f" - {cmd}
+   ↳ {desc}
+"
+    else:
+        text += "If you face issues, contact admins.
+"
+    text += "
+Examples:
+"
+    text += " - Admin flow: forward a channel post to the bot → then run:
+   /save_forward Arjuna_jee_2026 physics ch01 1
+"
+    text += " - Student flow: /start → Arjuna_jee_2026 → physics → Kinematics Basics → Lecture 1 → open short link → return to bot → lecture delivered.
+"
+    await message.reply(text)
 
 # ================= RUN =================
 if __name__ == "__main__":
