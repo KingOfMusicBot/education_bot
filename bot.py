@@ -556,7 +556,7 @@ async def help_cmd(message: types.Message):
         ("/pending_tokens", "Show recent unused tokens"),
         ("/update_repo [no-install|install]", "Pull latest repo and restart bot. Example: /update_repo no-install"),
     ]
-    text = "📘 Available commands":
+    text = "📘 Available commands:
 
 "
     # user commands
