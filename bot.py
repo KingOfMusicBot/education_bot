@@ -246,8 +246,8 @@ async def lecture_request(c: types.CallbackQuery):
     premium = bool(u.get("premium")) and u.get("expiry") and u["expiry"] > datetime.utcnow()
 
     # premium condition for > free limit
-    if lec > LIMIT_FREE and not premium:
-        return await c.message.answer("🔒 Premium required for this lecture.")
+    #if lec > LIMIT_FREE and not premium:
+        #return await c.message.answer("🔒 Premium required for this lecture.")
 
     # auto-subscribe check
     if REQUIRED_CHANNELS:
