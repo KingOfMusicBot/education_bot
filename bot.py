@@ -305,7 +305,12 @@ async def lecture_request(c: types.CallbackQuery):
         if not lec_doc:
             return await c.message.answer("Lecture not found.")
         try:
-            await bot.forward_message(uid, lec_doc["channel_id"], lec_doc["message_id"])
+            await bot.copy_message(
+    chat_id=uid,
+    from_chat_id=lec_doc["channel_id"],
+    message_id=lec_doc["message_id"]
+)
+
             return await c.answer("▶ Sent (admin bypass)")
         except Exception as e:
             logger.exception("admin forward failed: %s", e)
@@ -347,7 +352,12 @@ async def lecture_request(c: types.CallbackQuery):
         if not lec_doc:
             return await c.message.answer("Lecture not found.")
         try:
-            await bot.forward_message(uid, lec_doc["channel_id"], lec_doc["message_id"])
+            await bot.copy_message(
+    chat_id=uid,
+    from_chat_id=lec_doc["channel_id"],
+    message_id=lec_doc["message_id"]
+)
+
         except Exception as e:
             logger.exception("forward failed: %s", e)
             return await c.message.answer("Error forwarding lecture — contact admin.")
@@ -415,7 +425,12 @@ async def unlock_start(m: types.Message):
             return await m.answer("Lecture not found (contact admin).")
 
         try:
-            await bot.forward_message(uid, lec_doc["channel_id"], lec_doc["message_id"])
+            await bot.copy_message(
+    chat_id=uid,
+    from_chat_id=lec_doc["channel_id"],
+    message_id=lec_doc["message_id"]
+)
+
         except Exception as e:
             logger.exception("forward failed: %s", e)
             return await m.answer("Error forwarding lecture — contact admin.")
