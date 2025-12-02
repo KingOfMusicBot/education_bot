@@ -2,6 +2,10 @@
 import logging
 import secrets
 import urllib.parse
+import os
+import sys
+import asyncio
+from pathlib import Path
 from datetime import datetime, timedelta
 import requests
 from pymongo import MongoClient
@@ -19,7 +23,7 @@ SHORT_API = "be0a750eaa503966539bb811a849dd99ced62f24"
 ADMIN_IDS = [8142003954, 6722991035]
 
 # Channels user must join (public username or -100id). Keep empty [] if not enforcing.
-REQUIRED_CHANNELS = ["@OfficialStudymeta", ]  # example
+REQUIRED_CHANNELS = ["@OfficialStudyMeta", ]  # example
 
 # ADMIN BYPASS flag: if True, admins will NOT require shortener verification
 ADMIN_BYPASS = True
@@ -31,6 +35,11 @@ DAILY_UNLOCK_LIMIT = 30               # max free unlocks per day
 LIMIT_FREE = 10                       # free lecture count per subject (1..10)
 
 DB_NAME = "lecture_bot"
+
+# ----------------- Auto-update (git) config -----------------
+REPO_PATH = "/root/education_bot"   # <-- set to your repo folder (absolute)
+GIT_BRANCH = "main"                 # <-- branch to pull from
+AUTO_INSTALL_REQUIRES = False        # <-- set True if you want pip install -r requirements.txt automatically
 
 # ================= INIT =================
 logging.basicConfig(level=logging.INFO)
@@ -47,6 +56,7 @@ lectures_col = db.lectures
 chapters_col = db.chapters
 tokens_col = db.tokens
 analytics_col = db.analytics
+payments_col = db.payments if 'payments' in db.list_collection_names() else db.payments
 
 # In-memory helper for admin forwarded capture
 LAST_FORWARDED = {}
@@ -84,13 +94,13 @@ async def check_subscriptions(uid):
             return False, ch
     return True, None
 
+# ---------------- helper: shell-quote ----------------
+def sh_quote(s: str) -> str:
+    return "'" + s.replace("'", "'\\''") + "'"
+
 # ================= ADMIN: capture forwarded original post (reliable) ==============
 @dp.message_handler(lambda m: m.forward_from_chat is not None and m.from_user.id in ADMIN_IDS, content_types=types.ContentTypes.ANY)
 async def capture_forwarded(message: types.Message):
-    """
-    Admin forwards original channel post to bot chat.
-    Bot captures forward_from_chat.id and forward_from_message_id for reliable storage.
-    """
     try:
         fid = message.from_user.id
         fchat = message.forward_from_chat
@@ -105,10 +115,6 @@ async def capture_forwarded(message: types.Message):
 
 @dp.message_handler(commands=['save_forward'])
 async def save_forward_cmd(message: types.Message):
-    """
-    usage: /save_forward batch subject chapter lec_no
-    After forwarding original post to bot, run this to save into DB.
-    """
     if message.from_user.id not in ADMIN_IDS:
         return await message.reply("Not admin.")
     try:
@@ -182,7 +188,6 @@ async def add_lecture(message: types.Message):
 # ================= START / MENU =================
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message):
-    # deep-link unlock handling (token based)
     if "token_" in (message.text or ""):
         return await unlock_start(message)
 
@@ -261,7 +266,7 @@ async def lecture_request(c: types.CallbackQuery):
     premium = bool(u.get("premium")) and u.get("expiry") and u["expiry"] > datetime.utcnow()
 
     # premium condition for > free limit
-    #if lec > LIMIT_FREE and not premium:
+   # if lec > LIMIT_FREE and not premium:
        # return await c.message.answer("🔒 Premium required for this lecture.")
 
     # auto-subscribe check
@@ -389,18 +394,12 @@ async def unlock_start(m: types.Message):
 # ================= AUTO SYNC: channel_post handler for #meta caption ================
 @dp.channel_post_handler(content_types=types.ContentTypes.ANY)
 async def channel_post_handler(message: types.Message):
-    """
-    Auto-add lecture if channel post contains #meta tag in caption, format:
-    #meta batch=Arjuna_jee_2026 subject=physics chapter=ch01 lec=1
-    """
     try:
         caption = (message.caption or "") + " " + (message.text or "")
         if "#meta" not in caption:
             return
-        # parse key=value pairs after #meta
         start = caption.index("#meta")
         metastr = caption[start:]
-        # crude parse
         pairs = {}
         for part in metastr.replace("#meta", "").strip().split():
             if "=" in part:
@@ -420,7 +419,6 @@ async def channel_post_handler(message: types.Message):
             "message_id": message.message_id,
             "created_at": datetime.utcnow()
         })
-        # notify admins about auto-sync
         note = f"Auto-synced lecture: {batch}/{subject}/{chapter}/L{lec} from channel {message.chat.id}"
         for aid in ADMIN_IDS:
             try:
@@ -471,6 +469,73 @@ async def pending_tokens(message: types.Message):
     for r in rows:
         txt += f"{r.get('token')} | uid:{r.get('uid')} | created:{r.get('created_at')}\n"
     await message.reply(txt)
+
+# ---------------- Admin: Git pull + restart (admin-only) ----------------
+@dp.message_handler(commands=["update_repo"])
+async def update_repo(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return await message.reply("⛔ Not authorised.")
+
+    args = message.text.split()
+    do_install = AUTO_INSTALL_REQUIRES
+    if len(args) > 1 and args[1].lower() in ("no-install", "noinstall"):
+        do_install = False
+    if len(args) > 1 and args[1].lower() in ("install", "pip"):
+        do_install = True
+
+    repo = Path(REPO_PATH)
+    if not repo.exists():
+        return await message.reply(f"❌ REPO_PATH does not exist: {REPO_PATH}")
+
+    info_msg = await message.reply(f"🔄 Pulling from branch `{GIT_BRANCH}` at `{REPO_PATH}`...\nThis may take a few seconds.")
+    try:
+        cmd = f"cd {sh_quote(str(repo))} && git fetch --all --prune && git reset --hard origin/{sh_quote(GIT_BRANCH)} && git pull origin {sh_quote(GIT_BRANCH)}"
+        proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        out, err = await proc.communicate()
+        stdout = out.decode(errors="ignore").strip()
+        stderr = err.decode(errors="ignore").strip()
+
+        reply = f"📥 Git pull finished.\nExit: {proc.returncode}\n\n"
+        if stdout:
+            reply += f"--- stdout ---\n{stdout}\n\n"
+        if stderr:
+            reply += f"--- stderr ---\n{stderr}\n\n"
+
+        req_changed = False
+        if "requirements.txt" in stdout or "requirements.txt" in stderr:
+            req_changed = True
+
+        await info_msg.edit_text(reply + ("\nProceeding to install requirements..." if (do_install and req_changed) else ""))
+    except Exception as e:
+        logger.exception("git pull error")
+        return await info_msg.edit_text(f"❌ Git pull failed: {e}")
+
+    if do_install and req_changed:
+        try:
+            await info_msg.edit_text((info_msg.text or "") + "\n📦 Installing requirements (pip)...")
+            pip_cmd = f"{sh_quote(sys.executable)} -m pip install -r {sh_quote(str(repo / 'requirements.txt'))}"
+            proc = await asyncio.create_subprocess_shell(pip_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            out, err = await proc.communicate()
+            stdout = out.decode(errors="ignore").strip()
+            stderr = err.decode(errors="ignore").strip()
+            out_text = f"📦 pip finished (exit {proc.returncode}).\n\n"
+            if stdout: out_text += f"--- stdout ---\n{stdout}\n\n"
+            if stderr: out_text += f"--- stderr ---\n{stderr}\n\n"
+            await info_msg.edit_text((info_msg.text or "") + "\n" + out_text)
+        except Exception as e:
+            logger.exception("pip install error")
+            await info_msg.edit_text((info_msg.text or "") + f"\n❌ pip install failed: {e}")
+
+    try:
+        await info_msg.edit_text((info_msg.text or "") + "\n🔁 Restarting bot process now...")
+        try:
+            await bot.close()
+        except Exception:
+            pass
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    except Exception as e:
+        logger.exception("restart failed")
+        await message.reply(f"❌ Restart failed: {e}")
 
 # ================= RUN =================
 if __name__ == "__main__":
