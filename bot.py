@@ -13,7 +13,7 @@ import pytz
 # ================= CONFIG - REPLACE THESE =================
 BOT_TOKEN = "7572890989:AAGizMW3AO9mA-PONpEFAL4NBO6jldL-fNk"
 MONGO_URI = "mongodb+srv://parice819:fOJsdMBDj7xMKVFW@cluster0.str54m7.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-SHORT_API = "be0a750eaa503966539bb811a849dd99ced62f24"
+SHORT_API = "31bc63cf09433a44878b89018109020da87b23f6"
 
 # Admins - numeric Telegram IDs (replace with your real admin IDs)
 ADMIN_IDS = [8142003954, 6722991035]
@@ -295,7 +295,7 @@ async def lecture_request(c: types.CallbackQuery):
 
     # shorten link
     try:
-        api_url = "https://arolinks.com/api"
+        api_url = "https://hypelinks.in/api"
         params = {"api": SHORT_API, "url": long_link}
         resp = requests.get(api_url, params=params, timeout=10)
         data = resp.json()
