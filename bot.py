@@ -616,8 +616,7 @@ async def help_cmd(message: types.Message):
     parts.append(" - Admin: forward a channel post → then run /save_forward Arjuna_jee_2026 physics ch01 1")
     parts.append(" - Student: /start → choose batch → subject → chapter → lecture → verification link → unlocked")
 
-    help_text = "
-".join(parts)
+    help_text = " ".join(parts)
     await message.reply(help_text)
 
 # ================= RUN =================
