@@ -208,7 +208,7 @@ async def start(message: types.Message):
 
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
-        InlineKeyboardButton("➕ Add me to your group", url=add_bot_url),
+        InlineKeyboardButton("📚 Show Batches", callback_data="show_batches"),
         InlineKeyboardButton("👤 Owner", url=owner_url),
     )
     kb.add(
@@ -216,7 +216,7 @@ async def start(message: types.Message):
         InlineKeyboardButton("📣 Update Channel", url=update_url),
     )
     kb.add(
-        InlineKeyboardButton("📚 Show Batches", callback_data="show_batches")
+        InlineKeyboardButton("➕ Add me to your group", url=add_bot_url)
     )
 
     start_text = (
