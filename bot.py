@@ -11,7 +11,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import pytz
 
 # ================= CONFIG - REPLACE THESE =================
-BOT_TOKEN = "7572890989:AAGizMW3AO9mA-PONpEFAL4NBO6jldL-fNk"
+BOT_TOKEN = "7572890989:AAG8v1FILt1PLP5Gn1PDOB9ESJs6cUgScqg"
 MONGO_URI = "mongodb+srv://parice819:fOJsdMBDj7xMKVFW@cluster0.str54m7.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 SHORT_API = "31bc63cf09433a44878b89018109020da87b23f6"
 
