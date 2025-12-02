@@ -593,8 +593,7 @@ async def help_cmd(message: types.Message):
     isadm = is_admin(message.from_user.id)
 
     parts = []
-    parts.append("📘 Available commands:
-")
+    parts.append("📘 Available commands:")
     parts.append("User / Student:")
     parts.append(" - /start → Open menu and pick batch/subject/chapter/lecture")
     parts.append(" - Follow verification link for free lectures to unlock")
