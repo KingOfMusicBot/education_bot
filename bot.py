@@ -11,15 +11,18 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import pytz
 
 # ================= CONFIG - REPLACE THESE =================
-BOT_TOKEN = "7572890989:AAG8v1FILt1PLP5Gn1PDOB9ESJs6cUgScqg"
+BOT_TOKEN = "7572890989:AAFQizQJs0y48AFEpU4r_-iypYxtD7mLu2U"
 MONGO_URI = "mongodb+srv://parice819:fOJsdMBDj7xMKVFW@cluster0.str54m7.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-SHORT_API = "31bc63cf09433a44878b89018109020da87b23f6"
+SHORT_API = "be0a750eaa503966539bb811a849dd99ced62f24"
 
 # Admins - numeric Telegram IDs (replace with your real admin IDs)
 ADMIN_IDS = [8142003954, 6722991035]
 
 # Channels user must join (public username or -100id). Keep empty [] if not enforcing.
-REQUIRED_CHANNELS = ["@Officialstudymeta", ]  # example
+REQUIRED_CHANNELS = ["@OfficialStudymeta", ]  # example
+
+# ADMIN BYPASS flag: if True, admins will NOT require shortener verification
+ADMIN_BYPASS = True
 
 # Anti-abuse config
 TOKEN_EXPIRY_SECONDS = 10 * 60        # token valid for 10 minutes
@@ -242,12 +245,24 @@ async def lecture_request(c: types.CallbackQuery):
     _, batch, sub, chapter_id, lec = c.data.split("|", 4)
     lec = int(lec)
 
+    # ADMIN BYPASS: if enabled and user is admin -> send directly
+    if ADMIN_BYPASS and is_admin(uid):
+        lec_doc = lectures_col.find_one({"batch": batch, "subject": sub, "chapter": chapter_id, "lec_no": lec})
+        if not lec_doc:
+            return await c.message.answer("Lecture not found.")
+        try:
+            await bot.forward_message(uid, lec_doc["channel_id"], lec_doc["message_id"])
+            return await c.answer("▶ Sent (admin bypass)")
+        except Exception as e:
+            logger.exception("admin forward failed: %s", e)
+            return await c.message.answer("Error forwarding lecture — contact admin.")
+
     u = get_user(uid)
     premium = bool(u.get("premium")) and u.get("expiry") and u["expiry"] > datetime.utcnow()
 
     # premium condition for > free limit
     #if lec > LIMIT_FREE and not premium:
-        #return await c.message.answer("🔒 Premium required for this lecture.")
+       # return await c.message.answer("🔒 Premium required for this lecture.")
 
     # auto-subscribe check
     if REQUIRED_CHANNELS:
@@ -295,7 +310,7 @@ async def lecture_request(c: types.CallbackQuery):
 
     # shorten link
     try:
-        api_url = "https://hypelinks.in/api"
+        api_url = "https://arolinks.com/api"
         params = {"api": SHORT_API, "url": long_link}
         resp = requests.get(api_url, params=params, timeout=10)
         data = resp.json()
@@ -459,5 +474,5 @@ async def pending_tokens(message: types.Message):
 
 # ================= RUN =================
 if __name__ == "__main__":
-    logger.info("Bot starting with anti-abuse, subscribe checks, analytics & auto-sync...")
+    logger.info("Bot starting with ADMIN_BYPASS=%s ...", ADMIN_BYPASS)
     executor.start_polling(dp, skip_updates=True)
