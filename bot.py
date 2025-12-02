@@ -220,20 +220,14 @@ async def start(message: types.Message):
     )
 
     start_text = (
-        "👋 Welcome to Study Meta Bot!
+    "👋 Welcome to Study Meta Bot!\n\n"
+    "Use the buttons below:\n"
+    "• Add the bot to your group\n"
+    "• Contact owner or support\n"
+    "• Open update channel for latest lectures\n\n"
+    "Click Show Batches to view available batches."
+)
 
-"
-        "Use the buttons below:
-"
-        "• Add the bot to your group
-"
-        "• Contact owner or support
-"
-        "• Open update channel for latest lectures
-
-"
-        "Click Show Batches to view available batches."
-    )
 
     try:
         await bot.send_photo(chat_id=message.chat.id, photo=START_PIC, caption=start_text, reply_markup=kb)
