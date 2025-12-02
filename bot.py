@@ -23,7 +23,7 @@ SHORT_API = "be0a750eaa503966539bb811a849dd99ced62f24"
 ADMIN_IDS = [8142003954, 6722991035]
 
 # Channels user must join (public username or -100id). Keep empty [] if not enforcing.
-REQUIRED_CHANNELS = ["@YourAnnounceChannel", ]  # example
+REQUIRED_CHANNELS = ["@officialStudymeta", ]  # example
 
 # ADMIN BYPASS flag: if True, admins will NOT require shortener verification
 ADMIN_BYPASS = True
@@ -267,7 +267,7 @@ async def lecture_request(c: types.CallbackQuery):
 
     # premium condition for > free limit
     #if lec > LIMIT_FREE and not premium:
-        #return await c.message.answer("🔒 Premium required for this lecture.")
+       # return await c.message.answer("🔒 Premium required for this lecture.")
 
     # auto-subscribe check
     if REQUIRED_CHANNELS:
@@ -540,54 +540,38 @@ async def update_repo(message: types.Message):
 # ================= HELP COMMAND =================
 @dp.message_handler(commands=["help"])
 async def help_cmd(message: types.Message):
-    """Show available commands with short examples. Admins see admin-only commands."""
+    """Show available commands and examples."""
     isadm = is_admin(message.from_user.id)
-    user_cmds = [
-        ("/start", "Open bot menu (select batch → subject → chapter → lecture)"),
-        ("Select buttons", "Use on-screen buttons to navigate batches/subjects/chapters/lectures"),
-        ("/save_forward", "Admin helper — see admin commands"),
-    ]
-    admin_cmds = [
-        ("/add_chapter <batch> <subject> <chapter_id> \"Chapter Name\"", "Add chapter. Example: /add_chapter Arjuna_jee_2026 physics ch01 \"Kinematics Basics\""),
-        ("/add_lecture <batch> <subject> <chapter_id> <lec_no> <channel_id> <message_id>", "Add lecture manually. Example: /add_lecture Arjuna_jee_2026 physics ch01 1 -100123456789 45"),
-        ("Forward channel post to bot + /save_forward <batch> <subject> <chapter> <lec_no>", "Reliable way to save channel lecture without copying ids."),
-        ("/stats", "Show basic analytics"),
-        ("/top_lectures [N]", "Top N lectures by unlocks. Example: /top_lectures 10"),
-        ("/pending_tokens", "Show recent unused tokens"),
-        ("/update_repo [no-install|install]", "Pull latest repo and restart bot. Example: /update_repo no-install"),
-    ]
-    text = "📘 Available commands:
 
-"
-    # user commands
-    text += "User / Student:
-"
-    text += f" - /start → Open menu and pick batch/subject/chapter/lecture
-"
-    text += f" - After selecting lecture, follow on-screen verification link (shortener) to unlock free lectures.
+    parts = []
+    parts.append("📘 Available commands:\n")
+    parts.append("User / Student:")
+    parts.append(" - /start → Open menu and pick batch/subject/chapter/lecture")
+    parts.append(" - Follow verification link for free lectures to unlock")
+    parts.append("")
 
-"
     if isadm:
-        text += "Admin commands:
-"
-        for cmd, desc in admin_cmds:
-            text += f" - {cmd}
-   ↳ {desc}
-"
+        parts.append("Admin commands:")
+        parts.append(" - /add_chapter <batch> <subject> <chapter_id> \"Chapter Name\"")
+        parts.append(" - /add_lecture <batch> <subject> <chapter_id> <lec_no> <channel_id> <message_id>")
+        parts.append(" - Forward a channel post → /save_forward <batch> <subject> <chapter> <lec_no>")
+        parts.append(" - /stats → Show analytics")
+        parts.append(" - /top_lectures [N] → Top N lectures")
+        parts.append(" - /pending_tokens → Show unused tokens")
+        parts.append(" - /update_repo [no-install|install] → Pull latest code & restart bot")
     else:
-        text += "If you face issues, contact admins.
-"
-    text += "
-Examples:
-"
-    text += " - Admin flow: forward a channel post to the bot → then run:
-   /save_forward Arjuna_jee_2026 physics ch01 1
-"
-    text += " - Student flow: /start → Arjuna_jee_2026 → physics → Kinematics Basics → Lecture 1 → open short link → return to bot → lecture delivered.
-"
-    await message.reply(text)
+        parts.append("If you face issues, contact admins.")
+
+    parts.append("")
+    parts.append("Examples:")
+    parts.append(" - Admin: forward a channel post → then run /save_forward Arjuna_jee_2026 physics ch01 1")
+    parts.append(" - Student: /start → choose batch → subject → chapter → lecture → verification link → unlocked")
+
+    help_text = "\n".join(parts)
+    await message.reply(help_text)
 
 # ================= RUN =================
+
 if __name__ == "__main__":
     logger.info("Bot starting with ADMIN_BYPASS=%s ...", ADMIN_BYPASS)
     executor.start_polling(dp, skip_updates=True)
