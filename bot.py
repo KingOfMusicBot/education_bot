@@ -20,7 +20,7 @@ MONGO_URI = "mongodb+srv://parice819:fOJsdMBDj7xMKVFW@cluster0.str54m7.mongodb.n
 SHORT_API = "be0a750eaa503966539bb811a849dd99ced62f24"
 
 # Admins - numeric Telegram IDs (replace with your real admin IDs)
-ADMIN_IDS = [8142003954, 6722991035]
+ADMIN_IDS = [8142003954, 6722991035, 7705882248, 6403063997, 8590200017]
 
 # Channels user must join (public username or -100id). Keep empty [] if not enforcing.
 REQUIRED_CHANNELS = ["@OfficialStudymeta", ]  # example
