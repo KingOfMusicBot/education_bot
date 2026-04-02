@@ -1,0 +1,6 @@
+aiogram==2.25.2
+pymongo==4.15.5
+motor==3.7.1
+requests==2.31.0
+pytz==2023.3
+dnspython==2.6.1
